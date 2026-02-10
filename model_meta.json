@@ -1,0 +1,17 @@
+{
+  "saved_at": "2026-02-10T12:59:06.424416",
+  "mode": "optuna",
+  "test_accuracy": 0.9666666666666667,
+  "study_name": "iris_optimization_20260210_125904",
+  "feature_names": [
+    "sepal length (cm)",
+    "sepal width (cm)",
+    "petal length (cm)",
+    "petal width (cm)"
+  ],
+  "target_names": [
+    "setosa",
+    "versicolor",
+    "virginica"
+  ]
+}
