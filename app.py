@@ -1,296 +1,220 @@
-# app.py
-import streamlit as st
-import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
-from sklearn import datasets
-from sklearn.ensemble import RandomForestClassifier
+import mlflow
+# MLflow’s scikit-learn flavor module
+import mlflow.sklearn
+from sklearn.datasets import load_iris
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, classification_report
-import joblib
-import json
-import os
-import time
-import optuna
-import optuna.visualization as vis
-from datetime import datetime
-
-# -----------------------
-# Page config + constants
-# -----------------------
-st.set_page_config(
-    page_title="Iris — Streamlit + Optuna demo",
-    layout="centered"
-)
-
-MODEL_PATH = "rf_iris_best.joblib"
-META_PATH = "model_meta.json"
-STUDY_DB = "rf_iris_study.db"
-
-# Unique study name per run to avoid Optuna conflicts
-STUDY_NAME = f"iris_optimization_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
-
-RANDOM_STATE = 42
-
-# -----------------------
-# Utility: load Iris (cached)
-# -----------------------
-@st.cache_data(show_spinner=False)
-def load_iris_df():
-    iris = datasets.load_iris()
-    X = pd.DataFrame(iris.data, columns=iris.feature_names)
-    y = pd.Series(iris.target, name="target")
-    return X, y, iris.target_names.tolist(), iris.feature_names
-
-X_all, y_all, target_names, feature_names = load_iris_df()
-
-# -----------------------
-# Train / Test split
-# -----------------------
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+# to create dataset signature
+from mlflow.models import infer_signature
+# Load data
+iris = load_iris()
 X_train, X_test, y_train, y_test = train_test_split(
-    X_all,
-    y_all,
-    test_size=0.2,
-    random_state=RANDOM_STATE,
-    stratify=y_all
+    iris.data, iris.target, test_size=0.2, random_state=42
 )
 
-# -----------------------
-# Persistence helpers
-# -----------------------
-def save_model_and_meta(model, meta, model_path=MODEL_PATH, meta_path=META_PATH):
-    joblib.dump(model, model_path)
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
+print(f"Training samples: {len(X_train)}")
+print(f"Test samples: {len(X_test)}")
 
-def load_model_and_meta(model_path=MODEL_PATH, meta_path=META_PATH):
-    if os.path.exists(model_path) and os.path.exists(meta_path):
-        model = joblib.load(model_path)
-        with open(meta_path, "r") as f:
-            meta = json.load(f)
-        return model, meta
-    return None, None
+mlflow.set_tracking_uri("file:./mlruns")
+# Set experiment name
+mlflow.set_experiment("iris-classification")
 
-persisted_model, persisted_meta = load_model_and_meta()
+# Start an MLflow run
+with mlflow.start_run(run_name="random-forest-baseline"):
 
-# -----------------------
-# App UI
-# -----------------------
-st.title("Interactive Iris Classifier — Streamlit + Optuna")
-st.write(
-    "Change feature values, train manually, or run Optuna hyperparameter tuning. "
-    "This app is designed for demos and teaching — not production use."
-)
+    # Define hyperparameters
+    n_estimators = 100
+    max_depth = 5
 
-# Dataset preview
-with st.expander("Dataset preview & stats", expanded=False):
-    st.dataframe(X_train.head())
-    stats = X_train.describe().T[["min", "mean", "max", "std"]]
-    st.dataframe(stats)
+    # Log parameters
+    mlflow.log_param("n_estimators", n_estimators)
+    mlflow.log_param("max_depth", max_depth)
+    mlflow.log_param("model_type", "RandomForest")
 
-# -----------------------
-# Sidebar inputs
-# -----------------------
-st.sidebar.header("Input features")
-
-feature_mins = X_train.min()
-feature_maxs = X_train.max()
-feature_means = X_train.mean()
-
-input_dict = {}
-for feat in feature_names:
-    input_dict[feat] = st.sidebar.slider(
-        feat,
-        float(feature_mins[feat]),
-        float(feature_maxs[feat]),
-        float(feature_means[feat]),
-        step=0.01
+    # Train model
+    model = RandomForestClassifier(
+        n_estimators=n_estimators,
+        max_depth=max_depth,
+        random_state=42
     )
+    model.fit(X_train, y_train)
 
-st.sidebar.markdown("---")
-mode = st.sidebar.radio(
-    "Mode",
-    ["Predict only (use saved model)", "Manual Tuning", "Auto-Tuning (Optuna)"]
-)
+    # Make predictions
+    y_pred = model.predict(X_test)
 
-# -----------------------
-# Prediction block
-# -----------------------
-st.header("Prediction")
+    # Calculate metrics
+    accuracy = accuracy_score(y_test, y_pred)
+    f1 = f1_score(y_test, y_pred, average='weighted')
 
-if st.button("Predict current inputs"):
-    X_input = np.array([list(input_dict.values())])
+    # Log metrics
+    mlflow.log_metric("accuracy", accuracy)
+    mlflow.log_metric("f1_score", f1)
 
-    model_to_use = None
-    model_source = None
+    # create signature
+    signature = infer_signature(X_train, model.predict(X_train))
 
-    if persisted_model is not None:
-        model_to_use = persisted_model
-        model_source = "saved best model"
-    elif "manual_model" in st.session_state:
-        model_to_use = st.session_state.manual_model
-        model_source = "manual model (this session)"
-    else:
-        st.warning("No trained model available.")
-        st.stop()
+    # Log the model
+    mlflow.sklearn.log_model(model, name="model", 
+                             signature=signature, 
+                             input_example=X_train[:5])
 
-    pred = model_to_use.predict(X_input)[0]
-    proba = model_to_use.predict_proba(X_input)[0]
+    print(f"Run complete!")
+    print(f"Accuracy: {accuracy:.4f}")
+    print(f"F1 Score: {f1:.4f}")
 
-    st.write(f"Using model: **{model_source}**")
-    st.write(f"Predicted class: **{target_names[int(pred)]}**")
 
-    st.subheader("Class probabilities")
-    st.table(pd.DataFrame([proba], columns=target_names))
+# Example: Logging multiple params/metrics at once
 
-# -----------------------
-# MODE: Manual Tuning
-# -----------------------
-if mode == "Manual Tuning":
-    st.header("Manual Tuning")
+with mlflow.start_run(run_name="efficient-logging-example"):
 
-    with st.form("manual_form"):
-        n_estimators = st.slider("n_estimators", 10, 300, 100, step=10)
-        max_depth = st.slider("max_depth (0 = None)", 0, 50, 5)
-        criterion = st.selectbox("criterion", ["gini", "entropy"])
-        save_model = st.checkbox("Save model persistently", value=False)
-        submitted = st.form_submit_button("Train")
+    # Log multiple parameters as a dictionary
+    params = {
+        "n_estimators": 200,
+        "max_depth": 10,
+        "min_samples_split": 5,
+        "random_state": 42,
+        "criterion": "gini"
+    }
+    mlflow.log_params(params)
 
-    if submitted:
-        md = None if max_depth == 0 else int(max_depth)
+    # Train model (abbreviated for demonstration)
+    model = RandomForestClassifier(**params)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-        with st.spinner("Training RandomForest..."):
-            clf = RandomForestClassifier(
-                n_estimators=n_estimators,
-                max_depth=md,
-                criterion=criterion,
-                random_state=RANDOM_STATE
-            )
-            clf.fit(X_train, y_train)
-            preds = clf.predict(X_test)
-            acc = accuracy_score(y_test, preds)
+    # Log multiple metrics
+    metrics = {
+        "accuracy": accuracy_score(y_test, y_pred),
+        "f1_weighted": f1_score(y_test, y_pred, average='weighted'),
+        "f1_macro": f1_score(y_test, y_pred, average='macro')
+    }
+    mlflow.log_metrics(metrics)
 
-        st.success(f"Test accuracy: {acc * 100:.2f}%")
-        st.text(classification_report(y_test, preds, target_names=target_names))
+    print("Logged all parameters and metrics!")
 
-        st.session_state.manual_model = clf
+with mlflow.start_run(run_name="with-confusion-matrix"):
 
-        if save_model:
-            meta = {
-                "saved_at": datetime.utcnow().isoformat(),
-                "mode": "manual",
-                "test_accuracy": acc,
-                "feature_names": feature_names,
-                "target_names": target_names
-            }
-            save_model_and_meta(clf, meta)
-            st.success("Model saved.")
+    # Train model
+    model = RandomForestClassifier(n_estimators=100, max_depth=5, random_state=42)
+    model.fit(X_train, y_train)
+    y_pred = model.predict(X_test)
 
-# -----------------------
-# MODE: Auto-Tuning (Optuna)
-# -----------------------
-elif mode == "Auto-Tuning (Optuna)":
-    st.header("Auto-Tuning with Optuna")
+    # Log parameters and metrics
+    mlflow.log_param("n_estimators", 100)
+    mlflow.log_param("max_depth", 5)
+    mlflow.log_metric("accuracy", accuracy_score(y_test, y_pred))
 
-    n_trials = st.sidebar.slider("Number of trials", 5, 80, 20)
+    # Create confusion matrix plot
+    cm = confusion_matrix(y_test, y_pred)
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues')
+    plt.title('Confusion Matrix')
+    plt.ylabel('True Label')
+    plt.xlabel('Predicted Label')
 
-    if st.button("Run Optimization"):
-        storage_str = f"sqlite:///{STUDY_DB}"
+    # Save and log the plot
+    plt.savefig("confusion_matrix.png")
+    mlflow.log_artifact("confusion_matrix.png")
+    plt.close()
 
-        study = optuna.create_study(
-            direction="maximize",
-            storage=storage_str,
-            study_name=STUDY_NAME
-        )
+    # create signature
+    signature = infer_signature(X_train, model.predict(X_train))
 
-        progress = st.progress(0)
-        status = st.empty()
+    # Log the model
+    mlflow.sklearn.log_model(model, name="model", 
+                             signature=signature, 
+                             input_example=X_train[:5])
 
-        def objective(trial):
-            clf = RandomForestClassifier(
-                n_estimators=trial.suggest_int("n_estimators", 10, 300),
-                max_depth=trial.suggest_int("max_depth", 2, 30),
-                criterion=trial.suggest_categorical("criterion", ["gini", "entropy"]),
-                random_state=RANDOM_STATE
-            )
-            clf.fit(X_train, y_train)
-            return accuracy_score(y_test, clf.predict(X_test))
+    print("Logged model and confusion matrix plot!")
 
-        def progress_cb(study, trial):
-            completed = len(study.trials)
-            progress.progress(min(completed / n_trials, 1.0))
-            status.text(f"Trials completed: {completed}/{n_trials}")
 
-        start = time.time()
-        with st.spinner("Running Optuna optimization..."):
-            study.optimize(objective, n_trials=n_trials, callbacks=[progress_cb])
+import os
+import tempfile
 
-        duration = time.time() - start
-        st.success(
-            f"Done in {duration:.1f}s — best accuracy: {study.best_value * 100:.2f}%"
-        )
+with mlflow.start_run(run_name="temp-artifacts-example"):
 
-        st.json(study.best_params)
+    # Create temporary directory
+    with tempfile.TemporaryDirectory() as tmpdir:
 
-        best = study.best_params
-        best_model = RandomForestClassifier(
-            n_estimators=int(best["n_estimators"]),
-            max_depth=int(best["max_depth"]),
-            criterion=best["criterion"],
-            random_state=RANDOM_STATE
-        )
-        best_model.fit(X_train, y_train)
+        # Train model (abbreviated)
+        model = RandomForestClassifier(n_estimators=100, random_state=42)
+        model.fit(X_train, y_train)
 
-        preds = best_model.predict(X_test)
-        acc = accuracy_score(y_test, preds)
+        # Save plot to temp directory
+        plot_path = os.path.join(tmpdir, "feature_importance.png")
 
-        meta = {
-            "saved_at": datetime.utcnow().isoformat(),
-            "mode": "optuna",
-            "test_accuracy": acc,
-            "study_name": study.study_name,
-            "feature_names": feature_names,
-            "target_names": target_names
-        }
+        # Create feature importance plot
+        feature_importance = model.feature_importances_
+        plt.figure(figsize=(10, 6))
+        plt.bar(range(len(feature_importance)), feature_importance)
+        plt.title('Feature Importance')
+        plt.xlabel('Feature Index')
+        plt.ylabel('Importance')
+        plt.savefig(plot_path)
+        plt.close()
 
-        save_model_and_meta(best_model, meta)
-        st.session_state.best_model = best_model
+        # Log entire directory of artifacts
+        mlflow.log_artifacts(tmpdir, artifact_path="plots")
 
-        st.write(f"Persisted best model — test accuracy: {acc * 100:.2f}%")
+    print("Logged artifacts from temporary directory!")
 
-        # Trial history
-        df = study.trials_dataframe()
-        st.subheader("Top trials")
-        st.dataframe(
-            df.sort_values("value", ascending=False)[
-                ["number", "value", "params_n_estimators", "params_max_depth"]
-            ].head()
-        )
+# Create a new experiment programmatically
+experiment_name = "iris-classification-advanced"
 
-        # Optuna plots
-        st.subheader("Optimization history")
-        try:
-            st.plotly_chart(
-                vis.plot_optimization_history(study),
-                use_container_width=True
-            )
-        except Exception as e:
-            st.write(e)
+# Get or create experiment
+experiment = mlflow.get_experiment_by_name(experiment_name)
+if experiment is None:
+    experiment_id = mlflow.create_experiment(experiment_name)
+    print(f"Created new experiment: {experiment_name} (ID: {experiment_id})")
+else:
+    experiment_id = experiment.experiment_id
+    print(f"ℹUsing existing experiment: {experiment_name} (ID: {experiment_id})")
 
-        st.subheader("Parameter importances")
-        try:
-            st.plotly_chart(
-                vis.plot_param_importances(study),
-                use_container_width=True
-            )
-        except Exception as e:
-            st.write(e)
+# Set as active experiment
+mlflow.set_experiment(experiment_name)
 
-# -----------------------
-# Footer
-# -----------------------
-st.markdown("---")
-st.caption(
-    "Educational demo only. For real HPO, run Optuna in a background worker "
-    "and store results in a metrics database."
-)
+with mlflow.start_run(run_name="tagged-run-example"):
 
+    # Set tags
+    mlflow.set_tag("model_family", "tree-based")
+    mlflow.set_tag("purpose", "baseline")
+    mlflow.set_tag("developer", "data-science-team")
+    mlflow.set_tag("mlflow.note.content", "Initial baseline model for comparison")
+
+    # Train and log (abbreviated)
+    model = RandomForestClassifier(n_estimators=50, random_state=42)
+    model.fit(X_train, y_train)
+
+    mlflow.log_param("n_estimators", 50)
+    mlflow.log_metric("accuracy", accuracy_score(y_test, model.predict(X_test)))
+
+    print("Run logged with tags!")
+
+
+# --- Section for Comparing Runs ---
+mlflow.set_experiment("iris-classification-comparison")
+
+# Define a grid of hyperparameters to compare
+param_grid = [
+    {"n_estimators": 10, "max_depth": 2},
+    {"n_estimators": 50, "max_depth": 5},
+    {"n_estimators": 100, "max_depth": 10},
+    {"n_estimators": 200, "max_depth": None}
+]
+
+for params in param_grid:
+    with mlflow.start_run(run_name=f"rf-depth-{params['max_depth']}"):
+        # Train
+        model = RandomForestClassifier(**params, random_state=42)
+        model.fit(X_train, y_train)
+        
+        # Log
+        mlflow.log_params(params)
+        acc = accuracy_score(y_test, model.predict(X_test))
+        mlflow.log_metric("accuracy", acc)
+        
+        print(f"Logged run with depth {params['max_depth']} - Accuracy: {acc}")
