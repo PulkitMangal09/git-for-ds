@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/pulkitmangal/git-for-ds/mlruns/456600417972531850/0af6d5a1ca934f4683df79296d9310c3/artifacts
+end_time: 1770973031255
+entry_point_name: ''
+experiment_id: '456600417972531850'
+lifecycle_stage: active
+run_id: 0af6d5a1ca934f4683df79296d9310c3
+run_name: logistic-regression-C-10.0
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1770973029605
+status: 3
+tags: []
+user_id: pulkitmangal

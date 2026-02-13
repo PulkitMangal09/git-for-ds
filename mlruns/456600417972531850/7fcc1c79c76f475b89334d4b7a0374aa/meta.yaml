@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/pulkitmangal/git-for-ds/mlruns/456600417972531850/7fcc1c79c76f475b89334d4b7a0374aa/artifacts
+end_time: 1770973022456
+entry_point_name: ''
+experiment_id: '456600417972531850'
+lifecycle_stage: active
+run_id: 7fcc1c79c76f475b89334d4b7a0374aa
+run_name: random-forest-depth-20
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1770973020501
+status: 3
+tags: []
+user_id: pulkitmangal

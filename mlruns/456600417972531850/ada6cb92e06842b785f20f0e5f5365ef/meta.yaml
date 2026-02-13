@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/pulkitmangal/git-for-ds/mlruns/456600417972531850/ada6cb92e06842b785f20f0e5f5365ef/artifacts
+end_time: 1770973032919
+entry_point_name: ''
+experiment_id: '456600417972531850'
+lifecycle_stage: active
+run_id: ada6cb92e06842b785f20f0e5f5365ef
+run_name: svm-kernel-linear
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1770973031256
+status: 3
+tags: []
+user_id: pulkitmangal

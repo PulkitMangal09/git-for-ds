@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/pulkitmangal/git-for-ds/mlruns/456600417972531850/be43e27dc5d0468bb9ace5764d7b3638/artifacts
+end_time: 1770973034559
+entry_point_name: ''
+experiment_id: '456600417972531850'
+lifecycle_stage: active
+run_id: be43e27dc5d0468bb9ace5764d7b3638
+run_name: svm-kernel-rbf
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1770973032920
+status: 3
+tags: []
+user_id: pulkitmangal
