@@ -2,6 +2,9 @@
 __pycache__/
 *.pyc
 
+mlruns/
+confusion_matrix.png
+
 # Env
 venv/
 .env

@@ -1,6 +1,0 @@
-artifact_location: file:///Users/pulkitmangal/git-for-ds/mlruns/456600417972531850
-creation_time: 1770973015726
-experiment_id: '456600417972531850'
-last_update_time: 1770973015726
-lifecycle_stage: active
-name: wine-quality-classification
